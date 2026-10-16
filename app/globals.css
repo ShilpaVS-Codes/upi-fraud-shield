@@ -1,0 +1,15 @@
+@import "tailwindcss";
+
+@theme {
+  --color-safepay-purple: #7c3aed;
+  --color-safepay-purple-dark: #4c1d95;
+
+  --color-risk-low: #16a34a;
+  --color-risk-medium: #ca8a04;
+  --color-risk-high: #dc2626;
+  --color-risk-critical: #dc2626;
+}
+
+body {
+  background-color: #f9fafb;
+}
