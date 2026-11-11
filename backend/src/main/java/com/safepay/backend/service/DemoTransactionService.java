@@ -21,10 +21,13 @@ import com.safepay.backend.repository.DemoTransactionRepository;
 public class DemoTransactionService {
 
     private final DemoTransactionRepository transactionRepository;
+    private final FraudDetectionService fraudDetectionService;
 
     public DemoTransactionService(
-            DemoTransactionRepository transactionRepository) {
+            DemoTransactionRepository transactionRepository,
+            FraudDetectionService fraudDetectionService) {
         this.transactionRepository = transactionRepository;
+        this.fraudDetectionService = fraudDetectionService;
     }
 
     @Transactional
@@ -46,6 +49,14 @@ public class DemoTransactionService {
         BigDecimal amount =
                 request.amount().setScale(2, RoundingMode.UNNECESSARY);
 
+        // Run fraud analysis BEFORE saving the current transaction.
+        FraudDetectionService.FraudAnalysis analysis =
+                fraudDetectionService.analyze(
+                        request.senderUpiId(),
+                        amount,
+                        request.city(),
+                        receivedAt);
+
         String referenceId = "DEMO-" + UUID.randomUUID()
                 .toString().substring(0, 8).toUpperCase(Locale.ROOT);
 
@@ -58,9 +69,17 @@ public class DemoTransactionService {
         transaction.setCity(request.city());
         transaction.setTransactionTime(transactionTime);
         transaction.setReceivedAt(receivedAt);
+
         transaction.setStatus("VALIDATED");
         transaction.setMode("demo");
-        transaction.setFraudCheck("NOT_PERFORMED");
+        transaction.setFraudCheck("COMPLETED");
+
+        // Store fraud analysis in PostgreSQL.
+        transaction.setRiskScore(analysis.riskScore());
+        transaction.setRiskLevel(analysis.riskLevel());
+        transaction.setRiskReasons(
+                String.join("; ", analysis.riskReasons()));
+        transaction.setDecision(analysis.decision());
 
         transactionRepository.save(transaction);
 
@@ -78,9 +97,13 @@ public class DemoTransactionService {
                 referenceId,
                 "VALIDATED",
                 "demo",
-                "NOT_PERFORMED",
-                "Request is valid. Fraud analysis is not implemented yet. "
+                "COMPLETED",
+                "Demo transaction analysed successfully. "
                         + "No real UPI network or bank was contacted.",
+                analysis.riskScore(),
+                analysis.riskLevel(),
+                analysis.riskReasons(),
+                analysis.decision(),
                 details);
     }
 }

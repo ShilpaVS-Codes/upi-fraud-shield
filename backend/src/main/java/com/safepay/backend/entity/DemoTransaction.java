@@ -52,6 +52,18 @@ public class DemoTransaction {
     @Column(name = "fraud_check", nullable = false, length = 30)
     private String fraudCheck = "NOT_PERFORMED";
 
+    @Column(name = "risk_score", nullable = false)
+    private Integer riskScore = 0;
+
+    @Column(name = "risk_level", nullable = false, length = 20)
+    private String riskLevel = "LOW";
+
+    @Column(name = "risk_reasons", nullable = false, columnDefinition = "TEXT")
+    private String riskReasons = "";
+
+    @Column(nullable = false, length = 20)
+    private String decision = "APPROVED";
+
     public DemoTransaction() {
     }
 
@@ -146,4 +158,35 @@ public class DemoTransaction {
     public void setFraudCheck(String fraudCheck) {
         this.fraudCheck = fraudCheck;
     }
-}
+        public Integer getRiskScore() {
+        return riskScore;
+    }
+
+    public void setRiskScore(Integer riskScore) {
+        this.riskScore = riskScore;
+    }
+
+    public String getRiskLevel() {
+        return riskLevel;
+    }
+
+    public void setRiskLevel(String riskLevel) {
+        this.riskLevel = riskLevel;
+    }
+
+    public String getRiskReasons() {
+        return riskReasons;
+    }
+
+    public void setRiskReasons(String riskReasons) {
+        this.riskReasons = riskReasons;
+    }
+
+    public String getDecision() {
+        return decision;
+    }
+
+    public void setDecision(String decision) {
+        this.decision = decision;
+    }
+    }

@@ -10,6 +10,7 @@ import org.springframework.test.web.servlet.ResultActions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * Tests for POST /api/demo/transactions.
@@ -17,6 +18,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
  */
 @SpringBootTest
 @AutoConfigureMockMvc
+@Transactional
 class DemoTransactionControllerTest {
 
     private static final String SENDER = "arjun@safepay";
@@ -83,7 +85,11 @@ class DemoTransactionControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("VALIDATED"))
                 .andExpect(jsonPath("$.mode").value("demo"))
-                .andExpect(jsonPath("$.fraudCheck").value("NOT_PERFORMED"))
+                .andExpect(jsonPath("$.fraudCheck").value("COMPLETED"))
+                .andExpect(jsonPath("$.riskScore").value(0))
+                .andExpect(jsonPath("$.riskLevel").value("LOW"))
+                .andExpect(jsonPath("$.riskReasons").isEmpty())
+                .andExpect(jsonPath("$.decision").value("APPROVED"))
                 .andExpect(jsonPath("$.message").exists())
                 .andExpect(jsonPath("$.referenceId").exists())
                 .andExpect(jsonPath("$.transaction.senderUpiId").value("arjun@safepay"))
@@ -114,6 +120,114 @@ class DemoTransactionControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("VALIDATED"));
     }
+
+    // ---------- Fraud detection ----------
+
+    @Test
+    void highAmountTransactionGetsMediumRisk() throws Exception {
+        postTransaction(requestJson(
+                "highamount@safepay",
+                RECEIVER,
+                "10001",
+                CITY))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.riskScore").value(30))
+                .andExpect(jsonPath("$.riskLevel").value("MEDIUM"))
+                .andExpect(jsonPath("$.decision").value("REVIEW"))
+                .andExpect(jsonPath("$.riskReasons[0]")
+                        .value("Transaction amount exceeds Rs. 10,000"));
+        }
+        @Test
+        void transactionFromNewCityGetsMediumRisk() throws Exception {
+
+        // First transaction: establish the sender's usual city.
+        postTransaction(requestJson(
+                "newcity@safepay",
+                RECEIVER,
+                "1000",
+                "New Delhi"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.riskScore").value(0))
+                .andExpect(jsonPath("$.riskLevel").value("LOW"));
+
+        // Second transaction: same sender, different city.
+        postTransaction(requestJson(
+                "newcity@safepay",
+                RECEIVER,
+                "1000",
+                "Bengaluru"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.riskScore").value(30))
+                .andExpect(jsonPath("$.riskLevel").value("MEDIUM"))
+                .andExpect(jsonPath("$.decision").value("REVIEW"))
+                .andExpect(jsonPath("$.riskReasons[0]")
+                        .value("Transaction from a previously unused city"));
+        }
+
+    @Test
+    void fiveRecentTransactionsTriggerMediumRisk() throws Exception {
+
+        // Create five previous transactions from the same sender.
+        for (int i = 1; i <= 5; i++) {
+            postTransaction(requestJson(
+                    "rapid@safepay",
+                    RECEIVER,
+                    "1000",
+                    CITY))
+                    .andExpect(status().isOk());
+        }
+
+        // The sixth transaction should trigger the rapid transaction rule.
+        postTransaction(requestJson(
+                "rapid@safepay",
+                RECEIVER,
+                "1000",
+                CITY))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.riskScore").value(40))
+                .andExpect(jsonPath("$.riskLevel").value("MEDIUM"))
+                .andExpect(jsonPath("$.decision").value("REVIEW"))
+                .andExpect(jsonPath("$.riskReasons[0]")
+                        .value("Five or more transactions within 10 minutes"));
+    }
+        @Test
+        void allFraudRulesTogetherTriggerHighRisk() throws Exception {
+
+        // Step 1: Establish the sender's usual city.
+        postTransaction(requestJson(
+                "combined@safepay",
+                RECEIVER,
+                "1000",
+                "New Delhi"))
+                .andExpect(status().isOk());
+
+        // Step 2: Create five more recent transactions.
+        for (int i = 1; i <= 5; i++) {
+                postTransaction(requestJson(
+                        "combined@safepay",
+                        RECEIVER,
+                        "1000",
+                        "New Delhi"))
+                        .andExpect(status().isOk());
+        }
+
+        // Step 3: Trigger all three fraud rules.
+        postTransaction(requestJson(
+                "combined@safepay",
+                RECEIVER,
+                "10001",
+                "Bengaluru"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.riskScore").value(100))
+                .andExpect(jsonPath("$.riskLevel").value("HIGH"))
+                .andExpect(jsonPath("$.decision").value("BLOCKED"))
+                .andExpect(jsonPath("$.riskReasons[0]")
+                        .value("Transaction amount exceeds Rs. 10,000"))
+                .andExpect(jsonPath("$.riskReasons[1]")
+                        .value("Five or more transactions within 10 minutes"))
+                .andExpect(jsonPath("$.riskReasons[2]")
+                        .value("Transaction from a previously unused city"));
+        }
 
     // ---------- UPI ID validation ----------
 

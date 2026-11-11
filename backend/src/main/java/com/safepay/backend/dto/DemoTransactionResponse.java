@@ -3,6 +3,7 @@ package com.safepay.backend.dto;
 
 import java.math.BigDecimal;
 import java.time.OffsetDateTime;
+import java.util.List;
 
 public record DemoTransactionResponse(
         String referenceId,
@@ -10,6 +11,10 @@ public record DemoTransactionResponse(
         String mode,
         String fraudCheck,
         String message,
+        int riskScore,
+        String riskLevel,
+        List<String> riskReasons,
+        String decision,
         TransactionDetails transaction
 ) {
 
