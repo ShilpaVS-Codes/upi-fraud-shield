@@ -13,7 +13,7 @@ import {
   LogOut,
   Layers,
 } from "lucide-react";
-import { currentUser } from "@/lib/sample-data";
+import { useCurrentUser } from "@/lib/use-current-user";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutGrid },
@@ -27,6 +27,14 @@ const navItems = [
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const { user, loading } = useCurrentUser();
+
+  const initials = user?.fullName
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase() ?? "")
+    .join("") || "?";
 
   return (
     <aside className="hidden md:flex md:flex-col md:w-64 border-r border-gray-100 bg-white h-screen sticky top-0 px-4 py-6">
@@ -69,21 +77,25 @@ export default function Sidebar() {
         })}
       </nav>
 
+
       {/* User footer */}
       <div className="border-t border-gray-100 pt-4 mt-4">
         <div className="flex items-center gap-2 px-2 mb-3">
           <div className="w-8 h-8 rounded-full bg-safepay-purple text-white text-xs font-semibold flex items-center justify-center">
-            AK
+            {initials}
           </div>
-          <div>
-            <p className="text-sm font-medium text-gray-900 leading-tight">
-              {currentUser.name}
+
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-gray-900 leading-tight truncate">
+              {loading ? "Loading..." : user?.fullName ?? "Not signed in"}
             </p>
-            <p className="text-xs text-gray-400 leading-tight">
-              {currentUser.upiId}
+
+            <p className="text-xs text-gray-400 leading-tight truncate">
+              {user?.upiId ?? ""}
             </p>
           </div>
         </div>
+
         <Link
           href="/login"
           className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium text-red-500 hover:bg-red-50"
@@ -92,6 +104,7 @@ export default function Sidebar() {
           Sign Out
         </Link>
       </div>
+
     </aside>
   );
 }

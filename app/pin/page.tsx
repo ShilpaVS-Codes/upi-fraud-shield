@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { ChevronLeft, Delete } from "lucide-react";
 import AuthLayout from "@/components/AuthLayout";
-import { checkLogin, formatMobile, isValidMobile } from "@/lib/demo-auth";
+import { formatMobile, isValidMobile } from "@/lib/demo-auth";
 
 const PIN_LENGTH = 6;
 const keys = [1, 2, 3, 4, 5, 6, 7, 8, 9, "", 0, "back"];
@@ -21,6 +21,7 @@ export default function PinPage({
 
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
 
   // Someone opened /pin directly without entering a number first
@@ -41,30 +42,60 @@ export default function PinPage({
     );
   }
 
-  const handleKeyPress = (key: number | string) => {
-    setError("");
 
-    if (key === "back") {
-      setPin(pin.slice(0, -1));
-      return;
-    }
-    if (pin.length >= PIN_LENGTH) return;
+const handleKeyPress = async (key: number | string) => {
+  if (isSubmitting) return;
 
-    const nextPin = pin + key;
-    if (nextPin.length < PIN_LENGTH) {
-      setPin(nextPin);
-      return;
+  setError("");
+
+  if (key === "back") {
+    setPin((previous) => previous.slice(0, -1));
+    return;
+  }
+
+  if (pin.length >= PIN_LENGTH) return;
+
+  const nextPin = pin + key;
+
+  if (nextPin.length < PIN_LENGTH) {
+    setPin(nextPin);
+    return;
+  }
+
+  setPin(nextPin);
+  setIsSubmitting(true);
+
+  try {
+    const response = await fetch(
+      "http://localhost:8080/api/auth/login",
+      {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          mobile,
+          pin: nextPin,
+        }),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error("Invalid mobile number or PIN.");
     }
 
-    // All 6 digits entered: check against the demo accounts
-    if (checkLogin(mobile, nextPin)) {
-      setPin(nextPin);
-      router.push("/dashboard");
-    } else {
-      setPin("");
-      setError("Incorrect PIN, or this number is not registered in the demo.");
-    }
-  };
+    router.replace("/dashboard");
+  } catch {
+    setPin("");
+    setError(
+      "Login failed. Check your mobile number and PIN."
+    );
+  } finally {
+    setIsSubmitting(false);
+  }
+};
+
 
   return (
     <AuthLayout>
@@ -110,6 +141,7 @@ export default function PinPage({
           ) : (
             <button
               key={i}
+              disabled={isSubmitting}
               onClick={() => handleKeyPress(key)}
               aria-label={key === "back" ? "Delete last digit" : `Digit ${key}`}
               className="w-16 h-16 rounded-2xl border border-transparent flex items-center justify-center text-xl font-medium text-gray-800 hover:border-gray-200 hover:bg-purple-50 active:bg-purple-100"

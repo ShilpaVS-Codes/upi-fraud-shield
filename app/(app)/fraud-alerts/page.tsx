@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   AlertTriangle,
   AlertCircle,
@@ -18,16 +18,63 @@ import {
 import TopBar from "@/components/TopBar";
 import RiskBadge from "@/components/RiskBadge";
 import {
-  sampleAlerts,
   currentUser,
-  monthlyRisks,
-  initialUnreadAlertIds,
   type FraudAlert,
 } from "@/lib/sample-data";
 
 type Severity = FraudAlert["severity"];
 type FilterTab = "All" | Severity;
 type Notice = { type: "success" | "info"; text: string } | null;
+
+type ApiTransaction = {
+  referenceId: string;
+  receiverUpiId: string;
+  amount: number;
+  currency: string;
+  transactionTime: string;
+  status: string;
+  riskScore: number;
+  riskLevel: string;
+  decision: string;
+};
+
+function transactionToAlert(
+  tx: ApiTransaction
+): FraudAlert {
+  const blocked = tx.decision === "BLOCKED";
+
+  const date = new Date(tx.transactionTime);
+
+  return {
+    id: tx.referenceId,
+    title: blocked
+      ? "High-Risk Transaction Blocked"
+      : "Suspicious Transaction Requires Review",
+    description:
+      `Transaction ${tx.referenceId} to ${tx.receiverUpiId} ` +
+      `for Ã¢â€šÂ¹${Number(tx.amount).toLocaleString("en-IN")} ` +
+      `received a risk score of ${tx.riskScore}/100. ` +
+      `Decision: ${tx.decision}.`,
+    severity: blocked ? "CRITICAL" : "MEDIUM",
+    time: Number.isNaN(date.getTime())
+      ? "Unknown date"
+      : date.toLocaleString("en-IN", {
+          dateStyle: "medium",
+          timeStyle: "short",
+        }),
+    whatToDo: blocked
+      ? [
+          "Review the recipient UPI ID.",
+          "Verify the transaction details.",
+          "Do not retry suspicious payments without verification.",
+        ]
+      : [
+          "Verify the recipient before proceeding.",
+          "Check the transaction amount and location.",
+        ],
+  };
+}
+
 
 const filterTabs: FilterTab[] = ["All", "CRITICAL", "HIGH", "MEDIUM", "LOW", "INFO"];
 
@@ -40,22 +87,13 @@ const severityStyles: Record<Severity, { icon: typeof AlertTriangle; color: stri
   INFO: { icon: Info, color: "text-blue-500", bg: "bg-blue-50" },
 };
 
-// Bar and number colors for "This Month's Risks" (matched by the id in sample-data)
-const riskStyles: Record<string, { bar: string; text: string }> = {
-  phishing: { bar: "bg-red-500", text: "text-red-500" },
-  qr: { bar: "bg-orange-500", text: "text-orange-500" },
-  logins: { bar: "bg-blue-500", text: "text-blue-500" },
-  blocked: { bar: "bg-safepay-purple", text: "text-safepay-purple" },
-};
-const defaultRiskStyle = { bar: "bg-gray-400", text: "text-gray-500" };
-
 // Security Actions list. Every action is demo-only for now.
 const securityActions = [
   {
     label: "Change UPI PIN",
     icon: Lock,
     color: "text-orange-500",
-    message: "Demo only: changing the UPI PIN will work once the backend is connected.",
+    message: "PIN changes are not available from this page yet. No account settings were modified.",
   },
   {
     label: "Block Card Temporarily",
@@ -85,12 +123,101 @@ function getScoreLabel(score: number) {
 }
 
 export default function FraudAlertsPage() {
-  const [alerts, setAlerts] = useState<FraudAlert[]>(sampleAlerts);
-  const [unreadIds, setUnreadIds] = useState<string[]>(initialUnreadAlertIds);
+  const [alerts, setAlerts] = useState<FraudAlert[]>([]);
+  const [riskStats, setRiskStats] = useState({
+  reviewed: 0,
+  blocked: 0,
+  approved: 0,
+  });
+  const [unreadIds, setUnreadIds] = useState<string[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<FilterTab>("All");
   const [search, setSearch] = useState("");
   const [notice, setNotice] = useState<Notice>(null);
+
+useEffect(() => {
+  let cancelled = false;
+
+  async function loadFraudAlerts() {
+    try {
+      const apiUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
+
+      if (!apiUrl) {
+        throw new Error("Backend API URL is not configured.");
+      }
+
+      const response = await fetch(
+        `${apiUrl}/api/demo/transactions/history`,
+        {
+          credentials: "include",
+          cache: "no-store",
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(
+          response.status === 401
+            ? "Please log in again."
+            : "Unable to load fraud alerts."
+        );
+      }
+
+      const data: ApiTransaction[] = await response.json();
+
+      if (!Array.isArray(data)) {
+        throw new Error("Invalid fraud alert response.");
+      }
+
+      const actualAlerts = data
+        .filter(
+          (tx) =>
+            tx.decision === "REVIEW" ||
+            tx.decision === "BLOCKED"
+        )
+        .map(transactionToAlert);
+
+
+      if (!cancelled) {
+        setAlerts(actualAlerts);
+        setUnreadIds(actualAlerts.map((alert) => alert.id));
+
+        setRiskStats({
+          reviewed: data.filter(
+            (tx) => tx.decision === "REVIEW"
+          ).length,
+          blocked: data.filter(
+            (tx) => tx.decision === "BLOCKED"
+          ).length,
+          approved: data.filter(
+            (tx) => tx.decision === "APPROVED"
+          ).length,
+        });
+      }
+
+    } catch (error) {
+      if (!cancelled) {
+        setLoadError(
+          error instanceof Error
+            ? error.message
+            : "Unable to load alerts."
+        );
+      }
+    } finally {
+      if (!cancelled) {
+        setLoading(false);
+      }
+    }
+  }
+
+  loadFraudAlerts();
+
+  return () => {
+    cancelled = true;
+  };
+}, []);
+
 
   const filteredAlerts = alerts.filter((alert) => {
     const matchesTab = activeTab === "All" || alert.severity === activeTab;
@@ -104,7 +231,6 @@ export default function FraudAlertsPage() {
   const unreadCount = alerts.filter((alert) => unreadIds.includes(alert.id)).length;
 
   const score = currentUser.trustScore;
-  const maxRiskCount = Math.max(...monthlyRisks.map((risk) => risk.count));
 
   const showDemoNotice = (text: string) => {
     setNotice({ type: "info", text });
@@ -121,13 +247,27 @@ export default function FraudAlertsPage() {
 
   const handleMarkAllRead = () => {
     setUnreadIds([]);
-    setNotice({ type: "success", text: "All alerts marked as read." });
+    setNotice({
+      type: "info",
+      text: "Alerts marked as read for this session only.",
+    });
   };
 
+
   const handleResolve = (id: string) => {
-    setAlerts(alerts.filter((a) => a.id !== id));
+    setAlerts((previous) =>
+      previous.filter((alert) => alert.id !== id)
+    );
+    setUnreadIds((previous) =>
+      previous.filter((unreadId) => unreadId !== id)
+    );
     setExpandedId(null);
+    setNotice({
+      type: "info",
+      text: "Alert dismissed for this session only. The recorded transaction remains unchanged.",
+    });
   };
+
 
   return (
     <div>
@@ -149,9 +289,11 @@ export default function FraudAlertsPage() {
         </div>
       )}
 
+
       <p className="bg-purple-50 text-safepay-purple text-xs rounded-2xl px-4 py-3 mb-6">
-        Demo data: the alerts, scores and counts on this page are samples. The
-        buttons do not contact any bank or change any real account.
+        Fraud alerts and recorded fraud statistics are derived from
+        demo transactions. The safety score and security actions
+        remain illustrative. No real bank is contacted.
       </p>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_18rem]">
@@ -159,7 +301,7 @@ export default function FraudAlertsPage() {
         <div className="min-w-0">
           <div className="flex items-center justify-between gap-3 mb-4">
             <p className="text-sm text-gray-500">
-              AI-powered threat intelligence · Real-time monitoring
+              Rule-based fraud detection - Recorded transaction alerts
             </p>
             <button
               onClick={handleMarkAllRead}
@@ -215,7 +357,16 @@ export default function FraudAlertsPage() {
           </div>
 
           {/* Alert list */}
-          {alerts.length === 0 ? (
+          {loading ? (
+          <EmptyState
+            title="Loading fraud alerts"
+            subtitle="Checking recorded transaction risks..."
+          />
+        ) : loadError ? (
+          <div role="alert" className="bg-red-50 text-red-600 rounded-2xl p-4">
+            {loadError}
+          </div>
+        ) : alerts.length === 0 ? (
             <EmptyState
               title="You're all caught up"
               subtitle="No active fraud alerts."
@@ -340,10 +491,10 @@ export default function FraudAlertsPage() {
         <div className="flex flex-col gap-6">
           {/* AI Safety Score */}
           <div className="bg-gradient-to-br from-safepay-purple to-safepay-purple-dark rounded-3xl p-5 text-white shadow-lg shadow-purple-200">
-            <p className="text-sm text-white/80">AI Safety Score</p>
+            <p className="text-sm text-white/80">Demo Safety Score</p>
             <p className="text-5xl font-bold mt-2">{score}</p>
             <p className="text-xs text-white/80 mt-1">
-              out of 100 · {getScoreLabel(score)}
+              out of 100 Ã‚Â· {getScoreLabel(score)}
             </p>
             <div className="w-full h-2 bg-white/20 rounded-full overflow-hidden mt-4">
               <div
@@ -353,29 +504,47 @@ export default function FraudAlertsPage() {
             </div>
           </div>
 
-          {/* This Month's Risks */}
+
+          {/* Recorded fraud analysis */}
           <div className="bg-white rounded-2xl shadow-sm p-5">
-            <h2 className="font-semibold text-gray-900 mb-4">This Month&apos;s Risks</h2>
+            <h2 className="font-semibold text-gray-900 mb-4">
+              Recorded Fraud Analysis
+            </h2>
+
             <div className="space-y-4">
-              {monthlyRisks.map((risk) => {
-                const style = riskStyles[risk.id] ?? defaultRiskStyle;
-                return (
-                  <div key={risk.id}>
-                    <div className="flex items-center justify-between text-sm mb-1">
-                      <span className="text-gray-600">{risk.label}</span>
-                      <span className={`font-semibold ${style.text}`}>{risk.count}</span>
-                    </div>
-                    <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full rounded-full ${style.bar}`}
-                        style={{ width: `${(risk.count / maxRiskCount) * 100}%` }}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">
+                  Approved Transactions
+                </span>
+                <span className="font-semibold text-green-600">
+                  {riskStats.approved}
+                </span>
+              </div>
+
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">
+                  Transactions for Review
+                </span>
+                <span className="font-semibold text-orange-500">
+                  {riskStats.reviewed}
+                </span>
+              </div>
+
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">
+                  Blocked Transactions
+                </span>
+                <span className="font-semibold text-red-500">
+                  {riskStats.blocked}
+                </span>
+              </div>
             </div>
+
+            <p className="text-xs text-gray-400 mt-4">
+              Based on recorded demo transactions for this account.
+            </p>
           </div>
+
 
           {/* Security Actions */}
           <div className="bg-white rounded-2xl shadow-sm p-5">

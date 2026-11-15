@@ -96,7 +96,7 @@ export default function LoginPage() {
         Continue with Google
       </button>
       <p className="text-center text-xs text-gray-400 mt-2">
-        Unavailable in this demo. Real sign-in will be added in the backend phase.
+        Google Sign-In is unavailable in this demo. Please use mobile number login.
       </p>
 
       <div className="bg-purple-50 rounded-xl px-4 py-3 mt-6 text-xs text-gray-600">

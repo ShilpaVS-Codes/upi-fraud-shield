@@ -23,4 +23,7 @@ public interface DemoTransactionRepository
             String senderUpiId);
 
             boolean existsBySenderUpiIdIgnoreCase(String senderUpiId);
+
+     List<DemoTransaction> findBySenderUpiIdIgnoreCaseOrderByReceivedAtDesc(
+            String senderUpiId);
 }

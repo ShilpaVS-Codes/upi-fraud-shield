@@ -146,12 +146,14 @@ export const sampleTransactions: Transaction[] = [
   },
 ];
 
+
 export const sampleContacts: Contact[] = [
-  { id: "c1", name: "Priya Sharma", upiId: "priya.upi" },
-  { id: "c2", name: "Rahul Kumar", upiId: "rahul.biz", riskTag: "REVIEW" },
-  { id: "c3", name: "Sneha Patel", upiId: "sneha123" },
-  { id: "c4", name: "Aman Singh", upiId: "amansingh" },
+  { id: "c1", name: "Priya Sharma", upiId: "priya@upi" },
+  { id: "c2", name: "Rahul Kumar", upiId: "rahul@upi", riskTag: "REVIEW" },
+  { id: "c3", name: "Sneha Patel", upiId: "sneha@upi" },
+  { id: "c4", name: "Aman Singh", upiId: "aman@upi" },
 ];
+
 
 export const sampleAlerts: FraudAlert[] = [
   {

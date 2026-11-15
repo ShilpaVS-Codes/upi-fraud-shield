@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   Bell,
   CreditCard,
@@ -68,7 +68,7 @@ const securityToggles: ToggleItem[] = [
   {
     key: "aiFraudShield",
     label: "AI Fraud Shield",
-    description: "Real-time AI analysis on every transaction",
+    description: "Demo preference: rule-based fraud checks are handled by the backend",
   },
   {
     key: "autoBlockHighRisk",
@@ -78,12 +78,12 @@ const securityToggles: ToggleItem[] = [
   {
     key: "qrVerification",
     label: "QR Code Verification",
-    description: "Verify merchant identity before each QR payment",
+    description: "Demo preference: QR verification uses predefined sample merchants",
   },
   {
     key: "biometricAuth",
     label: "Biometric Auth",
-    description: "Use fingerprint or face ID to confirm payments",
+    description: "Demo preference: biometric authentication is not implemented",
   },
 ];
 
@@ -128,9 +128,11 @@ const privacyToggles: ToggleItem[] = [
   },
 ];
 
-const rupees = (amount: number) => `₹${amount.toLocaleString("en-IN")}`;
+const rupees = (amount: number) => `\u20B9${amount.toLocaleString("en-IN")}`;
 
 export default function SettingsPage() {
+  const router = useRouter();
+  const [loggingOut, setLoggingOut] = useState(false);
   const [activeSection, setActiveSection] = useState<Section>("security");
   const [settings, setSettings] = useState<UserSettings>(defaultSettings);
 
@@ -169,6 +171,36 @@ export default function SettingsPage() {
       )} per transaction (demo only).`,
     });
   };
+
+  const handleLogout = async () => {
+  if (loggingOut) return;
+
+  setLoggingOut(true);
+
+  try {
+    const apiUrl =
+      process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:8080";
+
+    const response = await fetch(`${apiUrl}/api/auth/logout`, {
+      method: "POST",
+      credentials: "include",
+    });
+
+    if (!response.ok) {
+      throw new Error("Logout failed");
+    }
+
+    router.replace("/login");
+    router.refresh();
+  } catch {
+    setNotice({
+      type: "info",
+      text: "Could not sign out. Please try again.",
+    });
+  } finally {
+    setLoggingOut(false);
+  }
+};
 
   const handleBlockClick = () => {
     if (isBlocked) {
@@ -214,14 +246,18 @@ export default function SettingsPage() {
   // Sign Out + version, shown under the menu on desktop and under the content on mobile
   const accountFooter = (
     <div className="mt-4 pt-4 border-t border-gray-100">
-      <Link
-        href="/login"
-        className="flex items-center gap-2 text-sm font-medium text-red-500"
-      >
-        <LogOut size={16} />
-        Sign Out
-      </Link>
-      <p className="text-xs text-gray-400 mt-3">SafePay v4.2.1 · Build 8472</p>
+      <button
+  type="button"
+  onClick={handleLogout}
+  disabled={loggingOut}
+  className="flex items-center gap-2 text-sm font-medium text-red-500 disabled:opacity-50"
+>
+  <LogOut size={16} />
+  {loggingOut ? "Signing Out..." : "Sign Out"}
+</button>
+      <p className="text-xs text-gray-400 mt-3">
+        SafePay - Academic Demo Version
+      </p>
     </div>
   );
 
@@ -304,7 +340,7 @@ export default function SettingsPage() {
                     onClick={() =>
                       setNotice({
                         type: "info",
-                        text: "Demo only: changing the PIN will work once the backend is connected.",
+                        text: "PIN changes are not available from Settings in this demo. No account details were modified.",
                       })
                     }
                     className="text-sm text-safepay-purple font-medium whitespace-nowrap"

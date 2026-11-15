@@ -1,25 +1,47 @@
+
 package com.safepay.backend.controller;
+
+import java.math.BigDecimal;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
+import org.springframework.security.test.context.support.WithMockUser;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 import org.springframework.transaction.annotation.Transactional;
 
+import com.safepay.backend.entity.DemoTransaction;
+import com.safepay.backend.entity.DemoUser;
+import com.safepay.backend.repository.DemoTransactionRepository;
+import com.safepay.backend.repository.DemoUserRepository;
+
 /**
  * Tests for POST /api/demo/transactions.
  * MockMvc calls the controller directly, so the server does not need to be running.
  */
+
 @SpringBootTest
 @AutoConfigureMockMvc
 @Transactional
+@WithMockUser(username = "test-user", roles = "USER")
 class DemoTransactionControllerTest {
+
+    @Autowired
+    private DemoUserRepository userRepository;
+
+    @Autowired
+    private DemoTransactionRepository transactionRepository;
+
 
     private static final String SENDER = "arjun@safepay";
     private static final String RECEIVER = "priya@upi";
@@ -31,11 +53,50 @@ class DemoTransactionControllerTest {
     // ---------- Helpers ----------
 
     // Sends a JSON body to the demo transaction endpoint
-    private ResultActions postTransaction(String json) throws Exception {
+
+
+        private ResultActions postTransaction(String json) throws Exception {
+
+        // Read the sender UPI ID from the JSON text.
+        // No additional JSON library is needed.
+        String senderUpiId = SENDER;
+
+        java.util.regex.Matcher matcher = java.util.regex.Pattern
+                .compile("\"senderUpiId\"\\s*:\\s*\"([^\"]*)\"")
+                .matcher(json);
+
+        if (matcher.find()) {
+                senderUpiId = matcher.group(1);
+        }
+
+        // Use a different test mobile number for each sender.
+        String mobile = "9" + String.format("%09d",
+                Integer.toUnsignedLong(senderUpiId.hashCode())
+                        % 1_000_000_000L);
+
+        // Create the account only if it does not already exist.
+        DemoUser account = userRepository.findByMobile(mobile)
+                .orElseGet(DemoUser::new);
+
+        if (account.getId() == null) {
+                OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+
+                account.setFullName("Test User");
+                account.setMobile(mobile);
+                account.setCity("New Delhi");
+                account.setUpiId(senderUpiId);
+                account.setPinHash("test-only-hash");
+                account.setCreatedAt(now);
+                account.setUpdatedAt(now);
+
+                userRepository.saveAndFlush(account);
+        }
+
         return mockMvc.perform(post("/api/demo/transactions")
+                .with(user(mobile).roles("USER"))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(json));
-    }
+        }
 
     // Builds a request body. "amount" is inserted as a raw JSON number (no quotes).
     private static String requestJson(String sender, String receiver, String amount, String city) {
@@ -367,4 +428,86 @@ class DemoTransactionControllerTest {
                 .andExpect(jsonPath("$.fieldErrors[2].message")
                         .value("receiverUpiId must look like name@handle"));
     }
+
+
+        @Test
+        void recentTransactionsRequireAuthentication() throws Exception {
+        mockMvc.perform(get("/api/demo/transactions/recent")
+                .with(org.springframework.security.test.web.servlet.request
+                        .SecurityMockMvcRequestPostProcessors.anonymous()))
+                .andExpect(status().isUnauthorized());
+        }
+
+@Test
+void recentTransactionsShowOnlyLoggedInUsersTransactions()
+        throws Exception {
+
+    OffsetDateTime now = OffsetDateTime.now(ZoneOffset.UTC);
+
+    // Create two separate demo users.
+    DemoUser anisha = new DemoUser();
+    anisha.setFullName("Anisha Test");
+    anisha.setMobile("9000000001");
+    anisha.setCity("Bengaluru");
+    anisha.setUpiId("anisha-isolation@safepay");
+    anisha.setPinHash("test-hash");
+    anisha.setCreatedAt(now);
+    anisha.setUpdatedAt(now);
+    userRepository.save(anisha);
+
+    DemoUser priya = new DemoUser();
+    priya.setFullName("Priya Test");
+    priya.setMobile("9000000002");
+    priya.setCity("Mysuru");
+    priya.setUpiId("priya-isolation@safepay");
+    priya.setPinHash("test-hash");
+    priya.setCreatedAt(now);
+    priya.setUpdatedAt(now);
+    userRepository.save(priya);
+
+    // Create a transaction belonging to Anisha.
+    DemoTransaction anishaTransaction = new DemoTransaction();
+    anishaTransaction.setReferenceId("DEMO-AAA10001");
+    anishaTransaction.setSenderUpiId(anisha.getUpiId());
+    anishaTransaction.setReceiverUpiId("merchant@upi");
+    anishaTransaction.setAmount(new BigDecimal("150.00"));
+    anishaTransaction.setCity("Bengaluru");
+    anishaTransaction.setTransactionTime(now);
+    anishaTransaction.setReceivedAt(now);
+    transactionRepository.save(anishaTransaction);
+
+    // Create a different transaction belonging to Priya.
+    DemoTransaction priyaTransaction = new DemoTransaction();
+    priyaTransaction.setReferenceId("DEMO-BBB20002");
+    priyaTransaction.setSenderUpiId(priya.getUpiId());
+    priyaTransaction.setReceiverUpiId("shop@upi");
+    priyaTransaction.setAmount(new BigDecimal("250.00"));
+    priyaTransaction.setCity("Mysuru");
+    priyaTransaction.setTransactionTime(now);
+    priyaTransaction.setReceivedAt(now);
+    transactionRepository.save(priyaTransaction);
+
+    // Log in as Anisha and request recent transactions.
+    mockMvc.perform(get("/api/demo/transactions/recent")
+            .with(user(anisha.getMobile()).roles("USER")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[0].referenceId")
+                    .value("DEMO-AAA10001"))
+            .andExpect(jsonPath("$[0].receiverUpiId")
+                    .value("merchant@upi"))
+            .andExpect(jsonPath("$[?(@.referenceId == 'DEMO-BBB20002')]")
+                    .isEmpty());
+
+    // Log in as Priya and verify the opposite.
+    mockMvc.perform(get("/api/demo/transactions/recent")
+            .with(user(priya.getMobile()).roles("USER")))
+            .andExpect(status().isOk())
+            .andExpect(jsonPath("$[0].referenceId")
+                    .value("DEMO-BBB20002"))
+            .andExpect(jsonPath("$[?(@.referenceId == 'DEMO-AAA10001')]")
+                    .isEmpty());
+}
+
+
+
 }

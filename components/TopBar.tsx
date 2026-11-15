@@ -1,10 +1,27 @@
+
+"use client";
+
 import Link from "next/link";
 import { Bell } from "lucide-react";
+import { useCurrentUser } from "@/lib/use-current-user";
 
 export default function TopBar({ title }: { title: string }) {
+  const { user } = useCurrentUser();
+
+  const initials = user?.fullName
+    ?.trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0))
+    .slice(0, 2)
+    .join("")
+    .toUpperCase() || "?";
+
   return (
     <div className="flex items-center justify-between mb-6">
-      <h1 className="text-2xl font-bold text-gray-900">{title}</h1>
+      <h1 className="text-2xl font-bold text-gray-900">
+        {title}
+      </h1>
 
       <div className="flex items-center gap-3">
         <span className="hidden sm:flex items-center gap-1.5 bg-green-50 text-green-600 text-xs font-medium px-3 py-1.5 rounded-full">
@@ -18,6 +35,7 @@ export default function TopBar({ title }: { title: string }) {
           className="relative w-9 h-9 rounded-full flex items-center justify-center hover:bg-gray-100"
         >
           <Bell size={18} className="text-gray-600" />
+
           <span className="absolute top-1 right-1 w-4 h-4 rounded-full bg-red-500 text-white text-[10px] flex items-center justify-center">
             2
           </span>
@@ -26,9 +44,10 @@ export default function TopBar({ title }: { title: string }) {
         <Link
           href="/profile"
           aria-label="Go to profile"
+          title={user?.fullName || "My Profile"}
           className="w-9 h-9 rounded-full bg-safepay-purple text-white text-xs font-semibold flex items-center justify-center"
         >
-          AK
+          {initials}
         </Link>
       </div>
     </div>
