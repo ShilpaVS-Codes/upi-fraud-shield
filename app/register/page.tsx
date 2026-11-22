@@ -22,6 +22,7 @@ export default function RegisterPage() {
   const [confirmPin, setConfirmPin] = useState("");
   const [error, setError] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [enrollFingerprint, setEnrollFingerprint] = useState(false);
   const [createdMobile, setCreatedMobile] = useState<string | null>(null);
 
   const handleCreate = async (event: FormEvent<HTMLFormElement>) => {
@@ -67,7 +68,9 @@ export default function RegisterPage() {
 
     try {
       const response = await fetch(
-        "http://localhost:8080/api/auth/register",
+        enrollFingerprint
+          ? "http://localhost:8080/api/auth/register?fingerprint=true"
+          : "http://localhost:8080/api/auth/register",
         {
           method: "POST",
           credentials: "include",
@@ -98,7 +101,9 @@ export default function RegisterPage() {
         }
 
         throw new Error(
-          "Registration failed. Please check your details and try again."
+          enrollFingerprint
+            ? "Fingerprint registration failed. Check the reader and try again."
+            : "Registration failed. Please check your details and try again."
         );
       }
 
@@ -128,11 +133,13 @@ export default function RegisterPage() {
 
           <p className="text-sm text-gray-500 mt-2">
             Your SafePay demo account for {formatMobile(createdMobile)}
-            {" "}has been saved. Log in using the PIN you created.
+            {" "}has been saved. {enrollFingerprint
+              ? "You can log in with your fingerprint or demo PIN."
+              : "Log in using the PIN you created."}
           </p>
 
           <Link
-            href={`/pin?mobile=${encodeURIComponent(createdMobile)}`}
+            href={enrollFingerprint ? "/login" : `/pin?mobile=${encodeURIComponent(createdMobile)}`}
             className="block w-full mt-6 py-4 rounded-2xl font-semibold text-white bg-gradient-to-r from-safepay-purple to-safepay-purple-dark"
           >
             Continue to Log In
@@ -234,6 +241,25 @@ export default function RegisterPage() {
             setError("");
           }}
         />
+
+        <label className="flex items-center gap-2 text-sm text-gray-700">
+          <input
+            type="checkbox"
+            checked={enrollFingerprint}
+            disabled={isSubmitting}
+            onChange={(event) => {
+              setEnrollFingerprint(event.target.checked);
+              setError("");
+            }}
+          />
+          Enroll fingerprint
+        </label>
+
+        {isSubmitting && enrollFingerprint && (
+          <p className="text-sm text-gray-600" role="status">
+            Place your finger on the reader, lift it, then scan the same finger again.
+          </p>
+        )}
 
         {error && (
           <p className="text-sm text-red-500" role="alert">

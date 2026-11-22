@@ -23,6 +23,9 @@ import com.safepay.backend.service.AuthService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
+import org.springframework.web.bind.annotation.RequestParam;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -36,9 +39,12 @@ public class AuthController {
 
     @PostMapping("/register")
     public ResponseEntity<AuthResponse> register(
-            @Valid @RequestBody RegisterRequest request) {
+            @Valid @RequestBody RegisterRequest request,
+            @RequestParam(name = "fingerprint", defaultValue = "false") boolean fingerprint) {
 
-        DemoUser user = authService.register(request);
+        DemoUser user = fingerprint
+                ? authService.registerWithFingerprint(request)
+                : authService.register(request);
 
         return ResponseEntity
                 .status(HttpStatus.CREATED)
@@ -51,7 +57,21 @@ public class AuthController {
             @Valid @RequestBody LoginRequest request,
             HttpServletRequest httpRequest) {
 
-        DemoUser user = authService.login(request);
+        return startSession(authService.login(request), httpRequest);
+    }
+
+    public record FingerprintLoginRequest(
+            @NotBlank @Pattern(regexp = "[0-9]{10}") String mobile) {}
+
+    @PostMapping("/fingerprint/login")
+    public ResponseEntity<AuthResponse> fingerprintLogin(
+            @Valid @RequestBody FingerprintLoginRequest request,
+            HttpServletRequest httpRequest) {
+        return startSession(authService.loginWithFingerprint(request.mobile()), httpRequest);
+    }
+
+    private ResponseEntity<AuthResponse> startSession(
+            DemoUser user, HttpServletRequest httpRequest) {
 
         // Invalidate any previous session.
         HttpSession oldSession = httpRequest.getSession(false);

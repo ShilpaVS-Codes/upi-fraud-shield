@@ -48,6 +48,14 @@ export default function Sidebar() {
           <p className="text-xs text-gray-400 leading-tight">UPI Fraud Shield</p>
         </div>
       </div>
+      <div className="mt-3 border-t border-gray-200 pt-3">
+  <p className="text-xs font-semibold text-violet-700">
+    Department of ECE
+  </p>
+  <p className="mt-1 text-[11px] leading-relaxed text-gray-500">
+    Sir M. Visvesvaraya Institute of Technology
+  </p>
+</div>
 
       {/* Nav links */}
       <nav className="flex-1 flex flex-col gap-1">

@@ -15,9 +15,41 @@ import {
 export default function LoginPage() {
   const [mobile, setMobile] = useState("");
   const [error, setError] = useState("");
+  const [isScanning, setIsScanning] = useState(false);
   const router = useRouter();
 
+  const handleFingerprintLogin = async () => {
+    if (isScanning || !isValidMobile(mobile)) return;
+
+    setError("");
+    setIsScanning(true);
+
+    try {
+      const response = await fetch(
+        "http://localhost:8080/api/auth/fingerprint/login",
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ mobile }),
+        }
+      );
+
+      if (!response.ok) {
+        setError("Fingerprint sign-in failed. Try again or continue with your PIN.");
+        return;
+      }
+
+      router.replace("/dashboard");
+    } catch {
+      setError("Could not reach SafePay. Check that the backend is running.");
+    } finally {
+      setIsScanning(false);
+    }
+  };
+
   const handleContinue = () => {
+    if (isScanning) return;
     if (!isValidMobile(mobile)) {
       setError("Enter a valid 10-digit mobile number (it should start with 6, 7, 8 or 9).");
       return;
@@ -49,6 +81,7 @@ export default function LoginPage() {
             inputMode="numeric"
             maxLength={10}
             value={mobile}
+            disabled={isScanning}
             onChange={(e) => {
               setMobile(digitsOnly(e.target.value, 10));
               setError("");
@@ -65,7 +98,7 @@ export default function LoginPage() {
 
         <button
           type="submit"
-          disabled={mobile.length !== 10}
+          disabled={isScanning || mobile.length !== 10}
           className={`w-full mt-8 py-4 rounded-2xl font-semibold text-white transition ${
             mobile.length === 10
               ? "bg-gradient-to-r from-safepay-purple to-safepay-purple-dark shadow-lg shadow-purple-300"
@@ -74,6 +107,20 @@ export default function LoginPage() {
         >
           Continue
         </button>
+        <button
+          type="button"
+          onClick={handleFingerprintLogin}
+          disabled={isScanning || !isValidMobile(mobile)}
+          className="w-full mt-3 py-3 rounded-2xl border border-safepay-purple font-semibold text-safepay-purple disabled:opacity-50"
+        >
+          {isScanning ? "Waiting for fingerprint..." : "Log in with fingerprint"}
+        </button>
+
+        {isScanning && (
+          <p className="text-sm text-gray-600 mt-2" role="status">
+            Place your enrolled finger on the SafePay reader.
+          </p>
+        )}
       </form>
 
       <p className="text-center text-sm text-gray-500 mt-5">

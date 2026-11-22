@@ -36,6 +36,9 @@ public class DemoUser {
     @Column(name = "pin_hash", nullable = false, length = 255)
     private String pinHash;
 
+    @jakarta.persistence.Column(name = "fingerprint_slot")
+    private Integer fingerprintSlot;
+
     @Column(name = "created_at", nullable = false)
     private OffsetDateTime createdAt;
 
@@ -112,5 +115,13 @@ public class DemoUser {
 
     public void setUpdatedAt(OffsetDateTime updatedAt) {
         this.updatedAt = updatedAt;
+    }
+
+    public Integer getFingerprintSlot() {
+        return fingerprintSlot;
+    }
+
+    public void setFingerprintSlot(Integer fingerprintSlot) {
+        this.fingerprintSlot = fingerprintSlot;
     }
 }
